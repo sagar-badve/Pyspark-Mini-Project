@@ -1,0 +1,128 @@
+#Pyspark Mini-Project
+################################################################################################################################
+#II) Analysis on student dataset.
+
+#Data Reading  and Parsing
+from pyspark import SparkConf, SparkContext
+conf = SparkConf().setMaster("local")
+sc = SparkContext(conf = conf)
+
+grades_rdd = sc.textFile("grades-file-path")
+names_rdd = sc.textFile("names-file-path")
+
+header = grades_rdd.first()
+grades_data_rdd = grades_rdd.filter(lambda line: line != header)
+grades_data_rdd.take(1)
+def grades_parsing(row): 
+    columns = row.split(",") 
+    stud_id = columns[0]
+    exam1 = columns[1]
+    exam2 = columns[2]
+    exam3 = columns[3]
+    return (stud_id, exam1, exam2, exam3)
+grades_columns_rdd = grades_data_rdd.map(grades_parsing)
+grades_columns_rdd.take(3)
+
+header1 = names_rdd.first()
+names_data_rdd = names_rdd.filter(lambda line: line != header1)
+def names_parsing(row): 
+    columns = row.split(",") 
+    stud_id = columns[0]
+    names = columns[1]
+    return (stud_id, names)
+names_columns_rdd = names_data_rdd.map(names_parsing)
+names_columns_rdd.take(3)
+
+#a)	Number of students whose names start with the letter “D”.
+names_with_D_list = names_columns_rdd \
+                .map(lambda x: x[1]) \
+                .filter(lambda x: x[0] == "D") \
+                .count()
+names_with_D_list
+
+#b)	Display names of students, their average on the 3 exams, and a letter grade. 
+
+grades_processed_rdd = grades_columns_rdd \
+                    .map(lambda x: (x[0], (x[1], x[2], x[3])))
+grades_processed_rdd.take(2)
+
+combined_rdd = grades_processed_rdd.union(names_columns_rdd)
+combined_list = combined_rdd.take(10)
+combined_list
+
+combined_processed_list = combined_rdd \
+                    .map(lambda x: (x[0], x[1])) \
+                    .groupByKey() \
+                    .map(lambda x : (x[0], list(x[1]))) \
+                    .map(lambda x: (x[0], x[1][0][0], x[1][0][1], x[1][0][2], x[1][1])) \
+                    .collect()
+combined_processed_list
+
+combined_processed_rdd = sc.parallelize(combined_processed_list)
+sorted_rdd = combined_processed_rdd.sortByKey()
+sorted_rdd.take(5)
+
+def grades(row1):
+    if int(row1)>=90:
+        return("A")
+    elif int(row1)<90 and int(row1)>=80:
+        return("B")
+    elif int(row1)<80 and int(row1)>=70:
+        return("C")
+    elif int(row1)<70 and int(row1)>=60:
+        return("D")
+    elif int(row1)<60 and int(row1)>=50:
+        return("E")
+    elif int(row1)<50 and int(row1)>=40:
+        return("F")
+    elif int(row1)<40 and int(row1)>=30:
+        return("G")
+    elif int(row1)<30 and int(row1)>=20:
+        return("H")
+    elif int(row1)<20 and int(row1)>=10:
+        return("I")
+    else:
+        return("J")
+
+def average_all(list1):
+    sum1 = int(list1[0]) + int(list1[1]) + int(list1[2])
+    average1 = float(sum1/3)
+    average1 = float("%.2f" % average1)
+    return(average1)
+
+average_rdd = sorted_rdd.map(lambda x: [x[1], x[2], x[3]])
+average_rdd1 = average_rdd.map(average_all)
+#average_rdd1.collect()
+
+exam_grades_rdd = average_rdd1.map(lambda x: (x)).map(grades)
+#exam_grades_rdd.collect()
+
+results1 = sorted_rdd.zip(average_rdd1)
+#results1.collect()
+
+results2 = results1.zip(exam_grades_rdd)
+result_list = results2.collect()
+result_list[0]
+
+final_result_rdd = results2 \
+                .map(lambda x:(x[0][0][4],x[0][1],x[1])) \
+                .sortByKey()
+
+final_result_rdd.collect()
+
+#c) Class average on exam1.
+
+exam1_rdd = sorted_rdd.map(lambda x: (x[1]))
+exam1_class_average_list = exam1_rdd \
+                        .map(lambda x: (int(x), 1)) \
+                        .reduce(lambda x, y: (x[0]+y[0], x[1]+y[1]))
+
+exam1_class_average = float(exam1_class_average_list[0]/exam1_class_average_list[1])
+exam1_class_average
+
+#d)	Repeat (b), but the display should be sorted in descending order by average on the 3 exams.
+
+average_descending_order = final_result_rdd.sortBy(lambda x: x[1], ascending = False)
+average_descending_order.collect()
+
+################################################################################################################################
