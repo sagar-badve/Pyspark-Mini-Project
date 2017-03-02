@@ -84,3 +84,5 @@ for label in sorted(labels):
     print("Class %s precision = %s" % (label, float("%.2f" % metrics.precision(label))))
     print("Class %s recall = %s" % (label, float("%.2f" % metrics.recall(label))))
     print("Class %s F1 Measure = %s" % (label, float("%.2f" % metrics.fMeasure(label, beta=1.0))))
+
+######################################################################################################################################
