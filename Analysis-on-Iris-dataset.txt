@@ -1,0 +1,86 @@
+#Pyspark Mini-Project
+################################################################################################################################
+#III) Analysis on Iris dataset.
+
+#Split the data into training and test sets. Build a LogisticRegression model and use it to predict items in the test set. 
+#Report the model evaluation metrics.
+
+from pyspark import SparkConf, SparkContext
+conf = SparkConf().setMaster("local")
+sc = SparkContext(conf = conf)
+iris_rdd = sc.textFile("iris-data-path")
+
+header = iris_rdd.first()
+iris_data_rdd = iris_rdd.filter(lambda line: line != header)
+
+def iris_parsing(row): 
+    columns = row.split(",") 
+    slength = float(columns[0])
+    swidth = float(columns[1])
+    plength = float(columns[2])
+    pwidth = float(columns[3])
+    if columns[4] == "Iris-setosa":
+        tclass = int(0)
+    elif columns[4] == "Iris-versicolor":
+        tclass = int(1)
+    elif columns[4] == "Iris-virginica":
+        tclass = int(2)
+    return (slength, swidth, plength, pwidth, tclass)
+	
+iris_columns_rdd = iris_data_rdd.map(iris_parsing)
+iris_columns_rdd.take(5)
+iris_columns_rdd1 = iris_columns_rdd \
+                .map(lambda x: (x[0], x[1], x[2], x[3]))
+				
+#Performing Scaling
+from pyspark.mllib.feature import StandardScaler
+
+scaler = StandardScaler(withMean=True, withStd=True)
+scaler_model = scaler.fit(iris_columns_rdd1)
+scaler_results = scaler_model.transform(iris_columns_rdd1)
+scaler_results.take(5)
+scaler_results1 = scaler_results \
+                .map(lambda x: (x[0], x[1], x[2], x[3]))
+
+iris_class_rdd = iris_columns_rdd \
+                .map(lambda x: (x[4]))
+
+combined_rdd = scaler_results1.zip(iris_class_rdd)
+combined_rdd.take(1)
+
+combined_rdd1 = combined_rdd \
+            .map(lambda x: [x[1], x[0][0], x[0][1], x[0][2], x[0][3]])
+combined_rdd1.take(1)
+
+from pyspark.mllib.regression import LabeledPoint
+def parsePoint(line):
+    line[0] = int(line[0])
+    line[1] = float("%.2f" % line[1])
+    line[2] = float("%.2f" % line[2])
+    line[3] = float("%.2f" % line[3])
+    line[4] = float("%.2f" % line[4])
+    return LabeledPoint(line[0], line[1:])
+
+parsedData = combined_rdd1.map(parsePoint)
+parsedData.take(2)
+
+train_data, test_data = parsedData.randomSplit([0.7, 0.3])
+
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS
+
+model = LogisticRegressionWithLBFGS.train(train_data, iterations=100, numClasses=3)
+predictionAndLabels = test_data.map(lambda lp: (float(model.predict(lp.features)), lp.label))
+
+from pyspark.mllib.util import MLUtils
+from pyspark.mllib.evaluation import MulticlassMetrics
+
+metrics = MulticlassMetrics(predictionAndLabels)
+accuracy = metrics.accuracy
+print("Overall Accuracy = %s" % float("%.2f" % accuracy))
+
+labels = parsedData.map(lambda lp: lp.label).distinct().collect()
+for label in sorted(labels):
+    print("Statistics by Class:")
+    print("Class %s precision = %s" % (label, float("%.2f" % metrics.precision(label))))
+    print("Class %s recall = %s" % (label, float("%.2f" % metrics.recall(label))))
+    print("Class %s F1 Measure = %s" % (label, float("%.2f" % metrics.fMeasure(label, beta=1.0))))
