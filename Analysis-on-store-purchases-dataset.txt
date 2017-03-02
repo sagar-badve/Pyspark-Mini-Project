@@ -1,0 +1,83 @@
+#Pyspark Mini-Project
+################################################################################################################################
+#I) Analysis on store-purchases dataset.
+
+#a)	Total number of records in the dataset.
+
+from pyspark import SparkConf, SparkContext
+conf = SparkConf().setMaster("local")
+sc = SparkContext(conf = conf)
+data_rdd = sc.textFile("file-path")
+data_rdd.take(1)
+
+def data_parsing(row): 
+    columns = row.split("\t") 
+    p_date = columns[0]
+    p_time = columns[1]
+    store_name = columns[2]
+    item = columns[3]
+    cost = float(columns[4])
+    payment_type = columns[5]
+    return (p_date, p_time, store_name, item, cost, payment_type)
+data_columns_rdd = data_rdd.map(data_parsing)
+data_columns_rdd.count()
+
+#b)	Display total sales by store_name. 
+
+total_cost_store_rdd = data_columns_rdd \
+                .map(lambda x: (x[2],x[4])) \
+                .reduceByKey(lambda x, y: x + y) \
+                .map(lambda i: (i[0], float("%.2f" % i[1])))
+sorted_total_cost_store_rdd = total_cost_store_rdd.sortByKey()
+sorted_total_cost_store_rdd.take(5)
+
+#c)	Display the payment types received by store.
+
+payment_types_store_list = data_columns_rdd \
+                .map(lambda x: (x[2], x[5])) \
+                .groupByKey() \
+                .sortByKey() \
+                .map(lambda x : (x[0], list(set(x[1])))).collect()
+
+payment_types_store_list[0:10]
+
+#d)	Total number of “Music” items bought.
+
+music_items_rdd = data_columns_rdd.filter(lambda x: x[3] == "Music").count()
+music_items_rdd
+
+#e) List of items that were purchased at the store “San Jose”. (List should not contain duplicates.)
+
+items_at_store_list = data_columns_rdd \
+                .map(lambda x: (x[2], x[3])) \
+                .filter(lambda x: x[0] == "San Jose") \
+                .groupByKey() \
+                .map(lambda x : (x[0], list(set(x[1])))).collect()
+items_at_store_list
+
+#f)	For each item, list all the stores from which it was purchased.
+
+each_item_stores_purchased_list = data_columns_rdd \
+                .map(lambda x: (x[3], x[2])) \
+                .groupByKey() \
+                .sortByKey() \
+                .map(lambda x : (x[0], list(set(x[1])))).collect()
+
+each_item_stores_purchased_list[0:1]
+
+#g)	Display the total sales for the store “San Jose” by date.
+
+san_jose_date_cost = data_columns_rdd \
+                .map(lambda x: (x[2], x[0], x[4])) \
+                .filter(lambda x: x[0] == "San Jose")
+san_jose_date_cost.take(1)
+
+date_cost_rdd = san_jose_date_cost \
+                .map(lambda x: (x[1], x[2])) \
+                .reduceByKey(lambda x, y: x + y) \
+                .sortByKey() \
+                .map(lambda i: (i[0], float("%.2f" % i[1])))
+
+date_cost_rdd.take(10)
+
+##################################################################################################################################
